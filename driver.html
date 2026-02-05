@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Buggy Driver</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+<header>
+  <h2>🧑‍✈️ Buggy Driver</h2>
+</header>
+
+<div style="padding:10px; text-align:center;">
+  <select id="buggyId">
+    <option value="buggy1">Buggy 1</option>
+    <option value="buggy2">Buggy 2</option>
+  </select>
+  <br>
+  <button onclick="startTracking()">Start Driving</button>
+  <button onclick="stopTracking()">Stop</button>
+  <p id="status">Status: OFF</p>
+</div>
+
+<script src="firebase.js"></script>
+
+<script>
+let watchId = null;
+
+function startTracking() {
+  const buggyId = document.getElementById("buggyId").value;
+  document.getElementById("status").innerText = "Status: ON";
+
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const data = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        timestamp: Date.now()
+      };
+
+      database.ref("buggies/" + buggyId).set(data);
+    },
+    (err) => alert("Location error"),
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000
+    }
+  );
+}
+
+function stopTracking() {
+  if (watchId) navigator.geolocation.clearWatch(watchId);
+  document.getElementById("status").innerText = "Status: OFF";
+}
+</script>
+</body>
+</html>
