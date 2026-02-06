@@ -1,21 +1,18 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+<!-- Firebase SDKs (compat version for browser) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyBupPnckDbBcqNOIcCGVucOfEeUd_uo22A",
-  authDomain: "tracker-mit.firebaseapp.com",
-  projectId: "tracker-mit",
-  storageBucket: "tracker-mit.firebasestorage.app",
-  messagingSenderId: "1055743844534",
-  appId: "1:1055743844534:web:b770c413e908951f470617",
-  measurementId: "G-M6JQWD69PH"
-};
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyBupPnckDbBcqNOIcCGVucOfEeUd_uo22A",
+    authDomain: "tracker-mit.firebaseapp.com",
+    databaseURL: "https://tracker-mit-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tracker-mit",
+    storageBucket: "tracker-mit.appspot.com",
+    messagingSenderId: "1055743844534",
+    appId: "1:1055743844534:web:b770c413e908951f470617"
+  };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+  firebase.initializeApp(firebaseConfig);
+  const database = firebase.database();
+</script>
