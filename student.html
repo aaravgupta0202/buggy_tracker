@@ -18,40 +18,21 @@
             margin-bottom: 15px;
         }
         
-        .buggy-list {
-            background: #f5f5f5;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 15px 0;
-            max-height: 200px;
-            overflow-y: auto;
+        .buggy-emoji {
+            font-size: 1.5em;
+            margin-right: 5px;
         }
         
-        .buggy-item {
-            padding: 8px;
-            border-bottom: 1px solid #ddd;
-            font-family: monospace;
-        }
-        
-        .buggy-item:last-child {
-            border-bottom: none;
-        }
-        
-        .buggy-name {
-            font-weight: bold;
-            color: #2196f3;
-        }
-        
-        .buggy-location {
-            color: #666;
-            font-size: 0.9rem;
+        /* Center button */
+        #centerBtn {
+            background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <h1>📍 Buggy Tracker - Student</h1>
+            <h1><span class="buggy-emoji">🛺</span> Buggy Tracker - Student</h1>
             <p>View all active buggies in real-time on campus</p>
         </header>
 
@@ -61,29 +42,12 @@
                     <div id="buggyCount" class="buggy-count">
                         Active Buggies: <span id="activeCount">0</span>
                     </div>
-                    <a href="driver.html" class="btn btn-secondary">🚗 Go to Driver Page</a>
-                </div>
-
-                <div class="instructions">
-                    <h3>Instructions:</h3>
-                    <ul>
-                        <li>The map will automatically center on your location</li>
-                        <li>Blue marker shows your location</li>
-                        <li>Car icons show active buggies moving in real-time</li>
-                        <li>Click on buggies for more info</li>
-                        <li>Buggies update every 5 seconds</li>
-                    </ul>
-                </div>
-
-                <div id="buggyList" class="buggy-list" style="display: none;">
-                    <!-- Buggy list will be populated here -->
                 </div>
 
                 <div id="map"></div>
                 
                 <div class="text-center mt-2">
                     <button id="centerBtn" class="btn">📍 Center on My Location</button>
-                    <button id="refreshBtn" class="btn">🔄 Refresh Buggy List</button>
                 </div>
             </div>
         </main>
@@ -91,6 +55,28 @@
         <footer class="footer">
             <p>Buggy Tracker System | Real-time campus transportation</p>
         </footer>
+    </div>
+
+    <!-- Floating Help Button -->
+    <button class="help-btn" id="helpBtn">?</button>
+
+    <!-- Instructions Modal -->
+    <div class="instructions-modal" id="instructionsModal">
+        <div class="instructions-content">
+            <button class="close-btn" id="closeModal">&times;</button>
+            <h3>Student Instructions</h3>
+            <ul>
+                <li><strong>Your Location:</strong> The blue marker shows your current location on campus.</li>
+                <li><strong>Buggy Icons:</strong> Each <span class="buggy-emoji">🛺</span> icon represents an active buggy.</li>
+                <li><strong>Real-time Tracking:</strong> Buggy positions update automatically every 5 seconds.</li>
+                <li><strong>Click Buggies:</strong> Click on any buggy icon to see its name and focus the map on it.</li>
+                <li><strong>Center Map:</strong> Use the "Center on My Location" button to return to your position.</li>
+                <li><strong>Live Movement:</strong> Watch buggies move in real-time as drivers travel across campus.</li>
+                <li><strong>Zoom Controls:</strong> Use +/- buttons or mouse wheel to zoom in/out on the map.</li>
+                <li><strong>Full Screen:</strong> The map automatically centers on your location when you first open the page.</li>
+            </ul>
+            <p><strong>Tip:</strong> Keep this page open to monitor buggy availability in real-time!</p>
+        </div>
     </div>
 
     <!-- Firebase SDK -->
@@ -103,15 +89,14 @@
     <script>
         // Firebase Configuration - MUST MATCH DRIVER CONFIG
         const firebaseConfig = {
-  apiKey: "AIzaSyBupPnckDbBcqNOIcCGVucOfEeUd_uo22A",
-  authDomain: "tracker-mit.firebaseapp.com",
-  databaseURL: "https://tracker-mit-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "tracker-mit",
-  storageBucket: "tracker-mit.firebasestorage.app",
-  messagingSenderId: "1055743844534",
-  appId: "1:1055743844534:web:b770c413e908951f470617",
-  measurementId: "G-M6JQWD69PH"
-};
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
 
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
@@ -119,9 +104,10 @@
 
         // DOM Elements
         const buggyCountSpan = document.getElementById('activeCount');
-        const buggyListDiv = document.getElementById('buggyList');
         const centerBtn = document.getElementById('centerBtn');
-        const refreshBtn = document.getElementById('refreshBtn');
+        const helpBtn = document.getElementById('helpBtn');
+        const instructionsModal = document.getElementById('instructionsModal');
+        const closeModal = document.getElementById('closeModal');
 
         // State variables
         let map = null;
@@ -168,7 +154,8 @@
         function updateBuggyMarker(buggyId, data) {
             const lat = data.lat;
             const lng = data.lng;
-            const name = data.name || `Buggy ${buggyId.substr(7, 3)}`;
+            // Use the buggy name from data, or create one from ID
+            const name = data.name || `Buggy ${buggyId.replace('driver_', '').substr(0, 3)}`;
             
             if (buggyMarkers[buggyId]) {
                 // Update existing marker
@@ -181,9 +168,11 @@
                 }).addTo(map);
                 buggyMarkers[buggyId].bindPopup(`<b>${name}</b><br>Updated: ${new Date(data.timestamp).toLocaleTimeString()}`);
                 
-                // Fly to buggy on click
+                // Fly to buggy on click and show "Buggy X" name
                 buggyMarkers[buggyId].on('click', function() {
                     map.flyTo([lat, lng], 17);
+                    // Show popup with buggy name
+                    this.openPopup();
                 });
             }
         }
@@ -196,32 +185,10 @@
             }
         }
 
-        // Update buggy list display
-        function updateBuggyList(buggies) {
+        // Update buggy count display
+        function updateBuggyCount(buggies) {
             const activeBuggies = Object.keys(buggies || {}).length;
             buggyCountSpan.textContent = activeBuggies;
-            
-            if (activeBuggies > 0) {
-                buggyListDiv.style.display = 'block';
-                let html = '';
-                Object.keys(buggies).forEach(buggyId => {
-                    const buggy = buggies[buggyId];
-                    const name = buggy.name || `Buggy ${buggyId.substr(7, 3)}`;
-                    html += `
-                        <div class="buggy-item">
-                            <span class="buggy-name">${name}</span><br>
-                            <span class="buggy-location">
-                                Lat: ${buggy.lat.toFixed(4)}, Lng: ${buggy.lng.toFixed(4)}<br>
-                                Updated: ${new Date(buggy.timestamp).toLocaleTimeString()}
-                            </span>
-                        </div>
-                    `;
-                });
-                buggyListDiv.innerHTML = html;
-            } else {
-                buggyListDiv.style.display = 'none';
-                buggyListDiv.innerHTML = '';
-            }
         }
 
         // Listen for buggy updates from Firebase
@@ -241,8 +208,8 @@
                     }
                 });
                 
-                // Update list display
-                updateBuggyList(buggies);
+                // Update count display
+                updateBuggyCount(buggies);
             });
         }
 
@@ -314,6 +281,15 @@
             );
         }
 
+        // Modal functions
+        function openInstructions() {
+            instructionsModal.style.display = 'flex';
+        }
+
+        function closeInstructions() {
+            instructionsModal.style.display = 'none';
+        }
+
         // Event Listeners
         centerBtn.addEventListener('click', () => {
             if (studentLatLng && map) {
@@ -322,13 +298,14 @@
             }
         });
 
-        refreshBtn.addEventListener('click', () => {
-            // Trigger a re-read from Firebase
-            database.ref('buggies').once('value').then((snapshot) => {
-                const buggies = snapshot.val() || {};
-                updateBuggyList(buggies);
-                alert('Buggy list refreshed!');
-            });
+        helpBtn.addEventListener('click', openInstructions);
+        closeModal.addEventListener('click', closeInstructions);
+
+        // Close modal when clicking outside
+        instructionsModal.addEventListener('click', (e) => {
+            if (e.target === instructionsModal) {
+                closeInstructions();
+            }
         });
 
         // Initialize on page load

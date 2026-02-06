@@ -27,12 +27,17 @@
             font-size: 0.9rem;
             margin-top: 10px;
         }
+        
+        .buggy-emoji {
+            font-size: 1.5em;
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <h1>🚗 Buggy Tracker - Driver</h1>
+            <h1><span class="buggy-emoji">🛺</span> Buggy Tracker - Driver</h1>
             <p>Share your live location with students on campus</p>
         </header>
 
@@ -45,20 +50,9 @@
                     <div id="status" class="status status-inactive">Status: Not Tracking</div>
                 </div>
 
-                <div class="instructions">
-                    <h3>Instructions:</h3>
-                    <ul>
-                        <li>Click "Start Driving" to begin sharing your location</li>
-                        <li>Keep this page open while driving</li>
-                        <li>Location updates automatically every 5 seconds</li>
-                        <li>Click "Stop Driving" to end tracking</li>
-                    </ul>
-                </div>
-
                 <div class="text-center">
                     <button id="startBtn" class="btn btn-start">▶ Start Driving</button>
                     <button id="stopBtn" class="btn btn-stop" disabled>⏹ Stop Driving</button>
-                    <a href="student.html" class="btn btn-secondary">👁️ View Student Page</a>
                 </div>
 
                 <div id="locationInfo" style="display: none;">
@@ -79,6 +73,27 @@
         </footer>
     </div>
 
+    <!-- Floating Help Button -->
+    <button class="help-btn" id="helpBtn">?</button>
+
+    <!-- Instructions Modal -->
+    <div class="instructions-modal" id="instructionsModal">
+        <div class="instructions-content">
+            <button class="close-btn" id="closeModal">&times;</button>
+            <h3>Driver Instructions</h3>
+            <ul>
+                <li><strong>Start Driving:</strong> Click the "Start Driving" button to begin sharing your location with students.</li>
+                <li><strong>Location Permission:</strong> Allow location access when your browser asks for permission.</li>
+                <li><strong>Keep Page Open:</strong> Keep this browser tab open while driving to continue sharing your location.</li>
+                <li><strong>Automatic Updates:</strong> Your location updates automatically every 5 seconds.</li>
+                <li><strong>Stop Tracking:</strong> Click "Stop Driving" when you're done, or close the page to automatically stop.</li>
+                <li><strong>Preview Map:</strong> See your own location on the preview map below the controls.</li>
+                <li><strong>Driver ID:</strong> Your unique ID is shown at the top. Students will see your buggy with this ID.</li>
+            </ul>
+            <p><strong>Note:</strong> This is a demo system. In production, proper authentication would be required.</p>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
@@ -89,15 +104,14 @@
     <script>
         // Firebase Configuration - REPLACE WITH YOUR ACTUAL CONFIG
         const firebaseConfig = {
-  apiKey: "AIzaSyBupPnckDbBcqNOIcCGVucOfEeUd_uo22A",
-  authDomain: "tracker-mit.firebaseapp.com",
-  databaseURL: "https://tracker-mit-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "tracker-mit",
-  storageBucket: "tracker-mit.firebasestorage.app",
-  messagingSenderId: "1055743844534",
-  appId: "1:1055743844534:web:b770c413e908951f470617",
-  measurementId: "G-M6JQWD69PH"
-};
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
 
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
@@ -112,6 +126,9 @@
         const currentLatSpan = document.getElementById('currentLat');
         const currentLngSpan = document.getElementById('currentLng');
         const lastUpdateSpan = document.getElementById('lastUpdate');
+        const helpBtn = document.getElementById('helpBtn');
+        const instructionsModal = document.getElementById('instructionsModal');
+        const closeModal = document.getElementById('closeModal');
 
         // State variables
         let driverId = null;
@@ -176,12 +193,15 @@
             // Update map preview
             initPreviewMap(lat, lng);
             
+            // Create buggy name from driver ID (e.g., "driver_abc123" becomes "Buggy abc123")
+            const buggyName = `Buggy ${driverId.replace('driver_', '').substr(0, 3)}`;
+            
             // Save to Firebase
             database.ref('buggies/' + driverId).set({
                 lat: lat,
                 lng: lng,
                 timestamp: timestamp,
-                name: `Buggy ${driverId.substr(7, 3)}`
+                name: buggyName
             }).catch(error => {
                 console.error('Error saving location:', error);
             });
@@ -251,9 +271,27 @@
             database.ref('buggies/' + driverId).remove();
         }
 
+        // Modal functions
+        function openInstructions() {
+            instructionsModal.style.display = 'flex';
+        }
+
+        function closeInstructions() {
+            instructionsModal.style.display = 'none';
+        }
+
         // Event Listeners
         startBtn.addEventListener('click', startTracking);
         stopBtn.addEventListener('click', stopTracking);
+        helpBtn.addEventListener('click', openInstructions);
+        closeModal.addEventListener('click', closeInstructions);
+
+        // Close modal when clicking outside
+        instructionsModal.addEventListener('click', (e) => {
+            if (e.target === instructionsModal) {
+                closeInstructions();
+            }
+        });
 
         // Clean up on page unload
         window.addEventListener('beforeunload', stopTracking);
