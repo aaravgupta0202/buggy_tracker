@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Buggy Tracker - Driver</title>
+    <title>Buggy Tracker - Driver 🛺</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
@@ -27,17 +27,12 @@
             font-size: 0.9rem;
             margin-top: 10px;
         }
-        
-        .buggy-emoji {
-            font-size: 1.5em;
-            margin-right: 5px;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <h1><span class="buggy-emoji">🛺</span> Buggy Tracker - Driver</h1>
+            <h1>🛺 Buggy Tracker - Driver</h1>
             <p>Share your live location with students on campus</p>
         </header>
 
@@ -135,6 +130,7 @@
         let watchId = null;
         let previewMap = null;
         let driverMarker = null;
+        let isTracking = false;
 
         // Generate a unique driver ID (for demo purposes)
         function generateDriverId() {
@@ -151,6 +147,13 @@
         // Initialize driver ID
         driverId = generateDriverId();
         driverIdSpan.textContent = driverId;
+
+        // Clean up Firebase entry on page load (in case previous session didn't clean up)
+        window.addEventListener('load', function() {
+            database.ref('buggies/' + driverId).remove().catch(() => {
+                // Ignore errors if entry doesn't exist
+            });
+        });
 
         // Initialize preview map
         function initPreviewMap(lat, lng) {
@@ -193,15 +196,16 @@
             // Update map preview
             initPreviewMap(lat, lng);
             
-            // Create buggy name from driver ID (e.g., "driver_abc123" becomes "Buggy abc123")
+            // Create buggy name from driver ID (e.g., "driver_abc123" becomes "Buggy abc")
             const buggyName = `Buggy ${driverId.replace('driver_', '').substr(0, 3)}`;
             
-            // Save to Firebase
+            // Save to Firebase with an "active" flag
             database.ref('buggies/' + driverId).set({
                 lat: lat,
                 lng: lng,
                 timestamp: timestamp,
-                name: buggyName
+                name: buggyName,
+                active: true
             }).catch(error => {
                 console.error('Error saving location:', error);
             });
@@ -230,7 +234,7 @@
 
         // Start tracking
         function startTracking() {
-            if (watchId) return;
+            if (watchId || isTracking) return;
             
             if (!navigator.geolocation) {
                 alert('Geolocation is not supported by your browser');
@@ -242,6 +246,7 @@
             statusDiv.className = 'status status-active';
             statusDiv.textContent = 'Status: Tracking Active';
             locationInfoDiv.style.display = 'block';
+            isTracking = true;
             
             // Start watching position
             watchId = navigator.geolocation.watchPosition(
@@ -249,14 +254,18 @@
                 handleLocationError,
                 {
                     enableHighAccuracy: true,
-                    maximumAge: 0,
-                    timeout: 5000
+                    maximumAge: 3000, // 3 seconds maximum age
+                    timeout: 10000   // 10 second timeout
                 }
             );
         }
 
-        // Stop tracking
+        // Stop tracking and clean up Firebase
         function stopTracking() {
+            if (!isTracking) return;
+            
+            isTracking = false;
+            
             if (watchId) {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
@@ -268,7 +277,9 @@
             statusDiv.textContent = 'Status: Not Tracking';
             
             // Remove from Firebase
-            database.ref('buggies/' + driverId).remove();
+            database.ref('buggies/' + driverId).remove().catch(error => {
+                console.error('Error removing from Firebase:', error);
+            });
         }
 
         // Modal functions
@@ -293,8 +304,60 @@
             }
         });
 
-        // Clean up on page unload
-        window.addEventListener('beforeunload', stopTracking);
+        // BEFORE UNLOAD - Clean up when user closes tab/navigates away
+        window.addEventListener('beforeunload', function(event) {
+            // Only clean up if we're actively tracking
+            if (isTracking) {
+                // We can't use async operations in beforeunload reliably
+                // Use sendBeacon or synchronous AJAX for cleanup
+                const data = JSON.stringify({
+                    driverId: driverId,
+                    action: 'cleanup'
+                });
+                
+                // Try to send cleanup request
+                navigator.sendBeacon('/api/cleanup', data);
+                
+                // Also try synchronous cleanup (less reliable but backup)
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/api/cleanup', false); // Synchronous!
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                    xhr.send(data);
+                } catch (e) {
+                    // Ignore errors in beforeunload
+                }
+                
+                // Set a flag for pagehide to do cleanup
+                sessionStorage.setItem('needsCleanup', driverId);
+            }
+        });
+
+        // PAGEHIDE - Alternative to beforeunload (works better on mobile)
+        window.addEventListener('pagehide', function() {
+            if (isTracking) {
+                stopTracking();
+            }
+        });
+
+        // VISIBILITY CHANGE - Handle when user switches tabs
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden && isTracking) {
+                // User switched tabs - we can pause updates or continue
+                // For now, we'll continue tracking but could add pause/resume
+            }
+        });
+
+        // Check if we need to clean up from a previous session
+        window.addEventListener('load', function() {
+            const needsCleanup = sessionStorage.getItem('needsCleanup');
+            if (needsCleanup) {
+                database.ref('buggies/' + needsCleanup).remove().catch(() => {
+                    // Ignore errors
+                });
+                sessionStorage.removeItem('needsCleanup');
+            }
+        });
     </script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Buggy Tracker - Student</title>
+    <title>Buggy Tracker - Student 🛺</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
@@ -18,21 +18,27 @@
             margin-bottom: 15px;
         }
         
-        .buggy-emoji {
-            font-size: 1.5em;
-            margin-right: 5px;
-        }
-        
         /* Center button */
         #centerBtn {
             background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+        }
+        
+        /* Stale buggy warning */
+        .stale-warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+            display: none;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <h1><span class="buggy-emoji">🛺</span> Buggy Tracker - Student</h1>
+            <h1>🛺 Buggy Tracker - Student</h1>
             <p>View all active buggies in real-time on campus</p>
         </header>
 
@@ -42,6 +48,10 @@
                     <div id="buggyCount" class="buggy-count">
                         Active Buggies: <span id="activeCount">0</span>
                     </div>
+                </div>
+
+                <div id="staleWarning" class="stale-warning">
+                    Some buggies may be stale (last update > 30 seconds ago)
                 </div>
 
                 <div id="map"></div>
@@ -67,13 +77,14 @@
             <h3>Student Instructions</h3>
             <ul>
                 <li><strong>Your Location:</strong> The blue marker shows your current location on campus.</li>
-                <li><strong>Buggy Icons:</strong> Each <span class="buggy-emoji">🛺</span> icon represents an active buggy.</li>
+                <li><strong>Buggy Icons:</strong> Each 🛺 icon represents an active buggy.</li>
                 <li><strong>Real-time Tracking:</strong> Buggy positions update automatically every 5 seconds.</li>
                 <li><strong>Click Buggies:</strong> Click on any buggy icon to see its name and focus the map on it.</li>
                 <li><strong>Center Map:</strong> Use the "Center on My Location" button to return to your position.</li>
                 <li><strong>Live Movement:</strong> Watch buggies move in real-time as drivers travel across campus.</li>
                 <li><strong>Zoom Controls:</strong> Use +/- buttons or mouse wheel to zoom in/out on the map.</li>
                 <li><strong>Full Screen:</strong> The map automatically centers on your location when you first open the page.</li>
+                <li><strong>Stale Buggies:</strong> If a buggy hasn't updated in 30+ seconds, it may no longer be active.</li>
             </ul>
             <p><strong>Tip:</strong> Keep this page open to monitor buggy availability in real-time!</p>
         </div>
@@ -108,6 +119,7 @@
         const helpBtn = document.getElementById('helpBtn');
         const instructionsModal = document.getElementById('instructionsModal');
         const closeModal = document.getElementById('closeModal');
+        const staleWarning = document.getElementById('staleWarning');
 
         // State variables
         let map = null;
@@ -115,6 +127,7 @@
         let buggyMarkers = {};
         let studentLatLng = null;
         let studentWatchId = null;
+        let lastCleanupTime = Date.now();
 
         // Initialize map
         function initMap(lat, lng) {
@@ -154,19 +167,38 @@
         function updateBuggyMarker(buggyId, data) {
             const lat = data.lat;
             const lng = data.lng;
-            // Use the buggy name from data, or create one from ID
+            const timestamp = data.timestamp || Date.now();
             const name = data.name || `Buggy ${buggyId.replace('driver_', '').substr(0, 3)}`;
+            
+            // Check if buggy is stale (more than 30 seconds old)
+            const isStale = Date.now() - timestamp > 30000;
             
             if (buggyMarkers[buggyId]) {
                 // Update existing marker
                 buggyMarkers[buggyId].setLatLng([lat, lng]);
-                buggyMarkers[buggyId].setPopupContent(`<b>${name}</b><br>Updated: ${new Date(data.timestamp).toLocaleTimeString()}`);
+                const popupContent = isStale 
+                    ? `<b>${name} (Stale)</b><br>Last update: ${new Date(timestamp).toLocaleTimeString()}`
+                    : `<b>${name}</b><br>Updated: ${new Date(timestamp).toLocaleTimeString()}`;
+                buggyMarkers[buggyId].setPopupContent(popupContent);
+                
+                // Update marker style if stale
+                if (isStale) {
+                    buggyMarkers[buggyId].setOpacity(0.6);
+                } else {
+                    buggyMarkers[buggyId].setOpacity(1);
+                }
             } else {
                 // Create new marker
                 buggyMarkers[buggyId] = L.marker([lat, lng], {
-                    icon: createBuggyIcon()
+                    icon: createBuggyIcon(),
+                    opacity: isStale ? 0.6 : 1
                 }).addTo(map);
-                buggyMarkers[buggyId].bindPopup(`<b>${name}</b><br>Updated: ${new Date(data.timestamp).toLocaleTimeString()}`);
+                
+                const popupContent = isStale 
+                    ? `<b>${name} (Stale)</b><br>Last update: ${new Date(timestamp).toLocaleTimeString()}`
+                    : `<b>${name}</b><br>Updated: ${new Date(timestamp).toLocaleTimeString()}`;
+                
+                buggyMarkers[buggyId].bindPopup(popupContent);
                 
                 // Fly to buggy on click and show "Buggy X" name
                 buggyMarkers[buggyId].on('click', function() {
@@ -175,6 +207,24 @@
                     this.openPopup();
                 });
             }
+            
+            // Check if we need to show stale warning
+            checkForStaleBuggies();
+        }
+
+        // Check for stale buggies
+        function checkForStaleBuggies() {
+            const now = Date.now();
+            let hasStaleBuggies = false;
+            
+            Object.keys(buggyMarkers).forEach(buggyId => {
+                // We can't check timestamp without storing it, so we'll rely on marker opacity
+                if (buggyMarkers[buggyId].options.opacity < 1) {
+                    hasStaleBuggies = true;
+                }
+            });
+            
+            staleWarning.style.display = hasStaleBuggies ? 'block' : 'none';
         }
 
         // Remove buggy marker
@@ -183,6 +233,21 @@
                 map.removeLayer(buggyMarkers[buggyId]);
                 delete buggyMarkers[buggyId];
             }
+        }
+
+        // Clean up stale buggies (remove buggies older than 60 seconds)
+        function cleanupStaleBuggies(buggies) {
+            const now = Date.now();
+            const staleThreshold = 60000; // 60 seconds
+            
+            Object.keys(buggies).forEach(buggyId => {
+                const buggy = buggies[buggyId];
+                if (now - buggy.timestamp > staleThreshold) {
+                    // This buggy is stale - remove it
+                    removeBuggyMarker(buggyId);
+                    // Note: We can't delete from Firebase here (read-only on student side)
+                }
+            });
         }
 
         // Update buggy count display
@@ -196,12 +261,18 @@
             database.ref('buggies').on('value', (snapshot) => {
                 const buggies = snapshot.val() || {};
                 
+                // Clean up stale buggies every 30 seconds
+                if (Date.now() - lastCleanupTime > 30000) {
+                    cleanupStaleBuggies(buggies);
+                    lastCleanupTime = Date.now();
+                }
+                
                 // Update buggy markers
                 Object.keys(buggies).forEach(buggyId => {
                     updateBuggyMarker(buggyId, buggies[buggyId]);
                 });
                 
-                // Remove markers for buggies that are no longer active
+                // Remove markers for buggies that are no longer in Firebase
                 Object.keys(buggyMarkers).forEach(buggyId => {
                     if (!buggies[buggyId]) {
                         removeBuggyMarker(buggyId);
