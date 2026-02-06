@@ -1,44 +1,262 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Buggy Driver</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buggy Tracker - Driver</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #previewMap {
+            height: 300px;
+            width: 100%;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .coordinates {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            margin: 15px 0;
+        }
+        
+        .last-update {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <header class="header">
+            <h1>🚗 Buggy Tracker - Driver</h1>
+            <p>Share your live location with students on campus</p>
+        </header>
 
-<header>🧑‍✈️ Buggy Driver</header>
+        <main>
+            <div class="card">
+                <div class="driver-info">
+                    <div class="driver-id">
+                        Driver ID: <span id="driverId">Generating...</span>
+                    </div>
+                    <div id="status" class="status status-inactive">Status: Not Tracking</div>
+                </div>
 
-<div class="panel">
-  <button onclick="start()">Start Driving</button>
-</div>
+                <div class="instructions">
+                    <h3>Instructions:</h3>
+                    <ul>
+                        <li>Click "Start Driving" to begin sharing your location</li>
+                        <li>Keep this page open while driving</li>
+                        <li>Location updates automatically every 5 seconds</li>
+                        <li>Click "Stop Driving" to end tracking</li>
+                    </ul>
+                </div>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+                <div class="text-center">
+                    <button id="startBtn" class="btn btn-start">▶ Start Driving</button>
+                    <button id="stopBtn" class="btn btn-stop" disabled>⏹ Stop Driving</button>
+                    <a href="student.html" class="btn btn-secondary">👁️ View Student Page</a>
+                </div>
 
-<script>
-firebase.initializeApp({
+                <div id="locationInfo" style="display: none;">
+                    <div class="coordinates">
+                        <strong>Current Location:</strong><br>
+                        Latitude: <span id="currentLat">-</span><br>
+                        Longitude: <span id="currentLng">-</span>
+                    </div>
+                    
+                    <div id="previewMap"></div>
+                    <div class="last-update" id="lastUpdate">Last updated: Never</div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Buggy Tracker System | Keep this page open while driving</p>
+        </footer>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    
+    <!-- Leaflet.js -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Firebase Configuration - REPLACE WITH YOUR ACTUAL CONFIG
+        const firebaseConfig = {
   apiKey: "AIzaSyBupPnckDbBcqNOIcCGVucOfEeUd_uo22A",
   authDomain: "tracker-mit.firebaseapp.com",
   databaseURL: "https://tracker-mit-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "tracker-mit",
-  storageBucket: "tracker-mit.appspot.com",
+  storageBucket: "tracker-mit.firebasestorage.app",
   messagingSenderId: "1055743844534",
-  appId: "1:1055743844534:web:b770c413e908951f470617"
-});
+  appId: "1:1055743844534:web:b770c413e908951f470617",
+  measurementId: "G-M6JQWD69PH"
+};
 
-const db = firebase.database();
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
 
-function start() {
-  navigator.geolocation.watchPosition(pos => {
-    db.ref("buggies/buggy1").set({
-      lat: pos.coords.latitude,
-      lng: pos.coords.longitude,
-      time: Date.now()
-    });
-  }, e => alert(e.message), { enableHighAccuracy: true });
-}
-</script>
+        // DOM Elements
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('status');
+        const driverIdSpan = document.getElementById('driverId');
+        const locationInfoDiv = document.getElementById('locationInfo');
+        const currentLatSpan = document.getElementById('currentLat');
+        const currentLngSpan = document.getElementById('currentLng');
+        const lastUpdateSpan = document.getElementById('lastUpdate');
 
+        // State variables
+        let driverId = null;
+        let watchId = null;
+        let previewMap = null;
+        let driverMarker = null;
+
+        // Generate a unique driver ID (for demo purposes)
+        function generateDriverId() {
+            // Use session storage to persist ID across refreshes
+            if (sessionStorage.getItem('buggyDriverId')) {
+                return sessionStorage.getItem('buggyDriverId');
+            }
+            
+            const id = 'driver_' + Math.random().toString(36).substr(2, 9);
+            sessionStorage.setItem('buggyDriverId', id);
+            return id;
+        }
+
+        // Initialize driver ID
+        driverId = generateDriverId();
+        driverIdSpan.textContent = driverId;
+
+        // Initialize preview map
+        function initPreviewMap(lat, lng) {
+            if (!previewMap) {
+                previewMap = L.map('previewMap').setView([lat, lng], 16);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(previewMap);
+            }
+            
+            // Add or update marker
+            if (!driverMarker) {
+                driverMarker = L.marker([lat, lng], {
+                    icon: L.icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/512/2258/2258965.png',
+                        iconSize: [40, 40],
+                        iconAnchor: [20, 40]
+                    })
+                }).addTo(previewMap);
+                driverMarker.bindPopup("<b>Your Location</b>").openPopup();
+            } else {
+                driverMarker.setLatLng([lat, lng]);
+            }
+            
+            previewMap.setView([lat, lng], previewMap.getZoom());
+        }
+
+        // Update location to Firebase
+        function updateLocation(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const timestamp = Date.now();
+            
+            // Update display
+            currentLatSpan.textContent = lat.toFixed(6);
+            currentLngSpan.textContent = lng.toFixed(6);
+            lastUpdateSpan.textContent = `Last updated: ${new Date(timestamp).toLocaleTimeString()}`;
+            
+            // Update map preview
+            initPreviewMap(lat, lng);
+            
+            // Save to Firebase
+            database.ref('buggies/' + driverId).set({
+                lat: lat,
+                lng: lng,
+                timestamp: timestamp,
+                name: `Buggy ${driverId.substr(7, 3)}`
+            }).catch(error => {
+                console.error('Error saving location:', error);
+            });
+        }
+
+        // Handle location errors
+        function handleLocationError(error) {
+            let message = '';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message = 'Location permission denied. Please enable location services.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = 'Location information unavailable.';
+                    break;
+                case error.TIMEOUT:
+                    message = 'Location request timed out.';
+                    break;
+                default:
+                    message = 'An unknown error occurred.';
+                    break;
+            }
+            alert('Error: ' + message);
+            stopTracking();
+        }
+
+        // Start tracking
+        function startTracking() {
+            if (watchId) return;
+            
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser');
+                return;
+            }
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            statusDiv.className = 'status status-active';
+            statusDiv.textContent = 'Status: Tracking Active';
+            locationInfoDiv.style.display = 'block';
+            
+            // Start watching position
+            watchId = navigator.geolocation.watchPosition(
+                updateLocation,
+                handleLocationError,
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );
+        }
+
+        // Stop tracking
+        function stopTracking() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            statusDiv.className = 'status status-inactive';
+            statusDiv.textContent = 'Status: Not Tracking';
+            
+            // Remove from Firebase
+            database.ref('buggies/' + driverId).remove();
+        }
+
+        // Event Listeners
+        startBtn.addEventListener('click', startTracking);
+        stopBtn.addEventListener('click', stopTracking);
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', stopTracking);
+    </script>
 </body>
 </html>

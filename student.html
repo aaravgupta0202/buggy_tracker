@@ -1,61 +1,346 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Buggy Tracker</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buggy Tracker - Student</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        .buggy-count {
+            background: #e8f5e9;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #2e7d32;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+        
+        .buggy-list {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .buggy-item {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            font-family: monospace;
+        }
+        
+        .buggy-item:last-child {
+            border-bottom: none;
+        }
+        
+        .buggy-name {
+            font-weight: bold;
+            color: #2196f3;
+        }
+        
+        .buggy-location {
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <header class="header">
+            <h1>📍 Buggy Tracker - Student</h1>
+            <p>View all active buggies in real-time on campus</p>
+        </header>
 
-<header>🛺 Buggy Tracker</header>
-<div id="map"></div>
+        <main>
+            <div class="card">
+                <div class="text-center mb-2">
+                    <div id="buggyCount" class="buggy-count">
+                        Active Buggies: <span id="activeCount">0</span>
+                    </div>
+                    <a href="driver.html" class="btn btn-secondary">🚗 Go to Driver Page</a>
+                </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                <div class="instructions">
+                    <h3>Instructions:</h3>
+                    <ul>
+                        <li>The map will automatically center on your location</li>
+                        <li>Blue marker shows your location</li>
+                        <li>Car icons show active buggies moving in real-time</li>
+                        <li>Click on buggies for more info</li>
+                        <li>Buggies update every 5 seconds</li>
+                    </ul>
+                </div>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+                <div id="buggyList" class="buggy-list" style="display: none;">
+                    <!-- Buggy list will be populated here -->
+                </div>
 
-<script>
-firebase.initializeApp({
+                <div id="map"></div>
+                
+                <div class="text-center mt-2">
+                    <button id="centerBtn" class="btn">📍 Center on My Location</button>
+                    <button id="refreshBtn" class="btn">🔄 Refresh Buggy List</button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Buggy Tracker System | Real-time campus transportation</p>
+        </footer>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    
+    <!-- Leaflet.js -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Firebase Configuration - MUST MATCH DRIVER CONFIG
+        const firebaseConfig = {
   apiKey: "AIzaSyBupPnckDbBcqNOIcCGVucOfEeUd_uo22A",
   authDomain: "tracker-mit.firebaseapp.com",
   databaseURL: "https://tracker-mit-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "tracker-mit",
-  storageBucket: "tracker-mit.appspot.com",
+  storageBucket: "tracker-mit.firebasestorage.app",
   messagingSenderId: "1055743844534",
-  appId: "1:1055743844534:web:b770c413e908951f470617"
-});
+  appId: "1:1055743844534:web:b770c413e908951f470617",
+  measurementId: "G-M6JQWD69PH"
+};
 
-const db = firebase.database();
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
 
-// Map
-const map = L.map("map").setView([20, 78], 5);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
-  .addTo(map);
+        // DOM Elements
+        const buggyCountSpan = document.getElementById('activeCount');
+        const buggyListDiv = document.getElementById('buggyList');
+        const centerBtn = document.getElementById('centerBtn');
+        const refreshBtn = document.getElementById('refreshBtn');
 
-// Buggy icon
-const buggyIcon = L.icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/512/854/854894.png",
-  iconSize: [40, 40]
-});
+        // State variables
+        let map = null;
+        let studentMarker = null;
+        let buggyMarkers = {};
+        let studentLatLng = null;
+        let studentWatchId = null;
 
-let marker = null;
+        // Initialize map
+        function initMap(lat, lng) {
+            if (!map) {
+                map = L.map('map').setView([lat, lng], 16);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(map);
+                
+                // Add student marker
+                studentMarker = L.marker([lat, lng], {
+                    icon: L.icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 32]
+                    })
+                }).addTo(map);
+                studentMarker.bindPopup("<b>Your Location</b>").openPopup();
+            } else {
+                studentMarker.setLatLng([lat, lng]);
+                map.setView([lat, lng], map.getZoom());
+            }
+        }
 
-// Listen to Firebase
-db.ref("buggies/buggy1").on("value", snap => {
-  const d = snap.val();
-  if (!d) return;
+        // Create buggy icon
+        function createBuggyIcon() {
+            return L.icon({
+                iconUrl: 'https://cdn-icons-png.flaticon.com/512/2258/2258965.png',
+                iconSize: [40, 40],
+                iconAnchor: [20, 40],
+                popupAnchor: [0, -40]
+            });
+        }
 
-  if (!marker) {
-    marker = L.marker([d.lat, d.lng], { icon: buggyIcon }).addTo(map);
-    map.setView([d.lat, d.lng], 17);
-  } else {
-    marker.setLatLng([d.lat, d.lng]);
-  }
-});
-</script>
+        // Update or create buggy marker
+        function updateBuggyMarker(buggyId, data) {
+            const lat = data.lat;
+            const lng = data.lng;
+            const name = data.name || `Buggy ${buggyId.substr(7, 3)}`;
+            
+            if (buggyMarkers[buggyId]) {
+                // Update existing marker
+                buggyMarkers[buggyId].setLatLng([lat, lng]);
+                buggyMarkers[buggyId].setPopupContent(`<b>${name}</b><br>Updated: ${new Date(data.timestamp).toLocaleTimeString()}`);
+            } else {
+                // Create new marker
+                buggyMarkers[buggyId] = L.marker([lat, lng], {
+                    icon: createBuggyIcon()
+                }).addTo(map);
+                buggyMarkers[buggyId].bindPopup(`<b>${name}</b><br>Updated: ${new Date(data.timestamp).toLocaleTimeString()}`);
+                
+                // Fly to buggy on click
+                buggyMarkers[buggyId].on('click', function() {
+                    map.flyTo([lat, lng], 17);
+                });
+            }
+        }
 
+        // Remove buggy marker
+        function removeBuggyMarker(buggyId) {
+            if (buggyMarkers[buggyId]) {
+                map.removeLayer(buggyMarkers[buggyId]);
+                delete buggyMarkers[buggyId];
+            }
+        }
+
+        // Update buggy list display
+        function updateBuggyList(buggies) {
+            const activeBuggies = Object.keys(buggies || {}).length;
+            buggyCountSpan.textContent = activeBuggies;
+            
+            if (activeBuggies > 0) {
+                buggyListDiv.style.display = 'block';
+                let html = '';
+                Object.keys(buggies).forEach(buggyId => {
+                    const buggy = buggies[buggyId];
+                    const name = buggy.name || `Buggy ${buggyId.substr(7, 3)}`;
+                    html += `
+                        <div class="buggy-item">
+                            <span class="buggy-name">${name}</span><br>
+                            <span class="buggy-location">
+                                Lat: ${buggy.lat.toFixed(4)}, Lng: ${buggy.lng.toFixed(4)}<br>
+                                Updated: ${new Date(buggy.timestamp).toLocaleTimeString()}
+                            </span>
+                        </div>
+                    `;
+                });
+                buggyListDiv.innerHTML = html;
+            } else {
+                buggyListDiv.style.display = 'none';
+                buggyListDiv.innerHTML = '';
+            }
+        }
+
+        // Listen for buggy updates from Firebase
+        function startBuggyTracking() {
+            database.ref('buggies').on('value', (snapshot) => {
+                const buggies = snapshot.val() || {};
+                
+                // Update buggy markers
+                Object.keys(buggies).forEach(buggyId => {
+                    updateBuggyMarker(buggyId, buggies[buggyId]);
+                });
+                
+                // Remove markers for buggies that are no longer active
+                Object.keys(buggyMarkers).forEach(buggyId => {
+                    if (!buggies[buggyId]) {
+                        removeBuggyMarker(buggyId);
+                    }
+                });
+                
+                // Update list display
+                updateBuggyList(buggies);
+            });
+        }
+
+        // Get student's location
+        function getStudentLocation() {
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser');
+                return;
+            }
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    studentLatLng = [lat, lng];
+                    
+                    // Initialize or update map
+                    initMap(lat, lng);
+                    
+                    // Start buggy tracking after we have student location
+                    startBuggyTracking();
+                },
+                (error) => {
+                    let message = '';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            message = 'Please enable location permissions to use this feature.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            message = 'Location information unavailable.';
+                            break;
+                        case error.TIMEOUT:
+                            message = 'Location request timed out.';
+                            break;
+                        default:
+                            message = 'An unknown error occurred.';
+                            break;
+                    }
+                    alert('Error: ' + message + ' Using default location.');
+                    
+                    // Use default location (campus center)
+                    studentLatLng = [40.7128, -74.0060]; // Default to NYC
+                    initMap(studentLatLng[0], studentLatLng[1]);
+                    startBuggyTracking();
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+            
+            // Watch for location changes
+            studentWatchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    studentLatLng = [lat, lng];
+                    
+                    if (studentMarker) {
+                        studentMarker.setLatLng([lat, lng]);
+                    }
+                },
+                null,
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 10000
+                }
+            );
+        }
+
+        // Event Listeners
+        centerBtn.addEventListener('click', () => {
+            if (studentLatLng && map) {
+                map.flyTo(studentLatLng, 16);
+                studentMarker.openPopup();
+            }
+        });
+
+        refreshBtn.addEventListener('click', () => {
+            // Trigger a re-read from Firebase
+            database.ref('buggies').once('value').then((snapshot) => {
+                const buggies = snapshot.val() || {};
+                updateBuggyList(buggies);
+                alert('Buggy list refreshed!');
+            });
+        });
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', getStudentLocation);
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (studentWatchId) {
+                navigator.geolocation.clearWatch(studentWatchId);
+            }
+            database.ref('buggies').off();
+        });
+    </script>
 </body>
 </html>
