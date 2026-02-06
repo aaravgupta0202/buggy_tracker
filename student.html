@@ -8,57 +8,52 @@
 </head>
 <body>
 
-<header>🛺 Live Buggy Map</header>
+<header>🛺 Buggy Tracker</header>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="firebase.js"></script>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-const map = L.map("map");
+firebase.initializeApp({
+  apiKey: "AIzaSyBupPnckDbBcqNOIcCGVucOfEeUd_uo22A",
+  authDomain: "tracker-mit.firebaseapp.com",
+  databaseURL: "https://tracker-mit-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "tracker-mit",
+  storageBucket: "tracker-mit.appspot.com",
+  messagingSenderId: "1055743844534",
+  appId: "1:1055743844534:web:b770c413e908951f470617"
+});
+
+const db = firebase.database();
+
+// Map
+const map = L.map("map").setView([20, 78], 5);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
   .addTo(map);
-
-// Student location
-navigator.geolocation.getCurrentPosition(
-  pos => {
-    const me = [pos.coords.latitude, pos.coords.longitude];
-    map.setView(me, 17);
-
-    L.circleMarker(me, { radius: 8, color: "blue" })
-      .addTo(map)
-      .bindPopup("You are here")
-      .openPopup();
-  },
-  () => map.setView([0,0], 2),
-  { enableHighAccuracy: true }
-);
 
 // Buggy icon
 const buggyIcon = L.icon({
   iconUrl: "https://cdn-icons-png.flaticon.com/512/854/854894.png",
-  iconSize: [40, 40],
-  iconAnchor: [20, 20]
+  iconSize: [40, 40]
 });
 
-const markers = {};
+let marker = null;
 
-database.ref("buggies").on("value", snapshot => {
-  const data = snapshot.val();
-  if (!data) return;
+// Listen to Firebase
+db.ref("buggies/buggy1").on("value", snap => {
+  const d = snap.val();
+  if (!d) return;
 
-  Object.keys(data).forEach(id => {
-    const { lat, lng } = data[id];
-    if (!lat || !lng) return;
-
-    if (!markers[id]) {
-      markers[id] = L.marker([lat, lng], { icon: buggyIcon })
-        .addTo(map)
-        .bindPopup("🛺 " + id);
-    } else {
-      markers[id].setLatLng([lat, lng]);
-    }
-  });
+  if (!marker) {
+    marker = L.marker([d.lat, d.lng], { icon: buggyIcon }).addTo(map);
+    map.setView([d.lat, d.lng], 17);
+  } else {
+    marker.setLatLng([d.lat, d.lng]);
+  }
 });
 </script>
 

@@ -6,52 +6,37 @@
 </head>
 <body>
 
-<header>🧑‍✈️ Driver Panel</header>
+<header>🧑‍✈️ Buggy Driver</header>
 
-<div class="container">
-  <div class="card">
-
-    <label>Select Buggy</label>
-    <select id="buggyId">
-      <option value="buggy1">Buggy 1</option>
-      <option value="buggy2">Buggy 2</option>
-    </select>
-
-    <button onclick="startTracking()">Start Driving</button>
-    <button class="stop" onclick="stopTracking()">Stop</button>
-
-    <div class="status" id="status">Status: OFF</div>
-
-  </div>
+<div class="panel">
+  <button onclick="start()">Start Driving</button>
 </div>
 
-<script src="firebase.js"></script>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-let watchId = null;
+firebase.initializeApp({
+  apiKey: "AIzaSyBupPnckDbBcqNOIcCGVucOfEeUd_uo22A",
+  authDomain: "tracker-mit.firebaseapp.com",
+  databaseURL: "https://tracker-mit-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "tracker-mit",
+  storageBucket: "tracker-mit.appspot.com",
+  messagingSenderId: "1055743844534",
+  appId: "1:1055743844534:web:b770c413e908951f470617"
+});
 
-function startTracking() {
-  document.getElementById("status").innerText = "Status: ON";
+const db = firebase.database();
 
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const data = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        timestamp: Date.now()
-      };
-
-      database.ref("buggies/" + document.getElementById("buggyId").value)
-        .set(data);
-    },
-    (err) => alert("Location error: " + err.message),
-    { enableHighAccuracy: true, maximumAge: 2000 }
-  );
-}
-
-function stopTracking() {
-  if (watchId) navigator.geolocation.clearWatch(watchId);
-  document.getElementById("status").innerText = "Status: OFF";
+function start() {
+  navigator.geolocation.watchPosition(pos => {
+    db.ref("buggies/buggy1").set({
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      time: Date.now()
+    });
+  }, e => alert(e.message), { enableHighAccuracy: true });
 }
 </script>
 
