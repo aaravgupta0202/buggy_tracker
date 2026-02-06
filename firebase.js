@@ -1,4 +1,4 @@
-<!-- Firebase SDKs (compat version for browser) -->
+<!-- Firebase SDKs (compat – required for plain HTML) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 

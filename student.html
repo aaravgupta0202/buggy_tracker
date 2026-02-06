@@ -2,93 +2,59 @@
 <html>
 <head>
   <title>Buggy Tracker</title>
-
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-
-  <style>
-    body { margin: 0; }
-    #map { height: 100vh; }
-  </style>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
-
 <body>
 
+<header>🛺 Live Buggy Map</header>
 <div id="map"></div>
 
-<!-- Leaflet -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<!-- Firebase -->
 <script src="firebase.js"></script>
 
 <script>
-/* ---------------- MAP INIT ---------------- */
-
 const map = L.map("map");
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
+  .addTo(map);
 
-/* OpenStreetMap tiles */
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "© OpenStreetMap"
-}).addTo(map);
-
-/* ---------------- STUDENT LOCATION ---------------- */
-
+// Student location
 navigator.geolocation.getCurrentPosition(
-  (pos) => {
-    const studentLatLng = [
-      pos.coords.latitude,
-      pos.coords.longitude
-    ];
+  pos => {
+    const me = [pos.coords.latitude, pos.coords.longitude];
+    map.setView(me, 17);
 
-    map.setView(studentLatLng, 17);
-
-    L.circleMarker(studentLatLng, {
-      radius: 8,
-      color: "blue"
-    })
-    .addTo(map)
-    .bindPopup("You are here")
-    .openPopup();
+    L.circleMarker(me, { radius: 8, color: "blue" })
+      .addTo(map)
+      .bindPopup("You are here")
+      .openPopup();
   },
-  () => {
-    // fallback if permission denied
-    map.setView([0, 0], 2);
-  },
+  () => map.setView([0,0], 2),
   { enableHighAccuracy: true }
 );
 
-/* ---------------- BUGGY ICON ---------------- */
-
+// Buggy icon
 const buggyIcon = L.icon({
   iconUrl: "https://cdn-icons-png.flaticon.com/512/854/854894.png",
   iconSize: [40, 40],
-  iconAnchor: [20, 20],
-  popupAnchor: [0, -20]
+  iconAnchor: [20, 20]
 });
 
 const markers = {};
 
-/* ---------------- FIREBASE LISTENER ---------------- */
-
-database.ref("buggies").on("value", (snapshot) => {
+database.ref("buggies").on("value", snapshot => {
   const data = snapshot.val();
   if (!data) return;
 
-  Object.keys(data).forEach((id) => {
-    const { lat, lng, timestamp } = data[id];
-
+  Object.keys(data).forEach(id => {
+    const { lat, lng } = data[id];
     if (!lat || !lng) return;
 
     if (!markers[id]) {
       markers[id] = L.marker([lat, lng], { icon: buggyIcon })
         .addTo(map)
-        .bindPopup(`🛺 ${id}`);
-
-      // Zoom to first buggy found
-      map.setView([lat, lng], 17);
+        .bindPopup("🛺 " + id);
     } else {
       markers[id].setLatLng([lat, lng]);
     }
